@@ -1,10 +1,33 @@
 import random as rand
+from math import e, log
 
 
 class Matrix:
     def __init__(self, data):
         self.data = data
+        if not isinstance(self.data[0], (float, int)):
+            self.shape = (len(self.data), len(self.data[0]))
+        else:
+            self.shape = (len(self.data),)
+
+    def squeeze(self):
+        assert len(self.data) == 1 or len(self.data[0]) == 1
+        
+        res = []
+        for i in range(len(self.data)):
+            for j in range(len(self.data[0])):
+                res.append(self.data[i][j])
+
+        return Matrix(res)
     
+    def tolist(self):
+        res = []
+
+        for elem in self.data:
+            res.append(elem)
+        
+        return res
+
     def __add__(self, other):
         rows = len(self.data)
         cols = len(self.data[0])
@@ -16,6 +39,8 @@ class Matrix:
                 sum_mat[row][col] = self.data[row][col] + other
         
         return Matrix(sum_mat)
+    
+
 
     def __repr__(self):
         return f"Matrix({self.data})"
@@ -23,20 +48,47 @@ class Matrix:
     def __getitem__(self, *keys):
         keys = keys[0]
 
-        if isinstance(keys, int):
+        if isinstance(keys, (int, float)):
+            keys = int(keys)
             return self.data[keys]
+        
         else:
             key1, key2 = keys
             return self.data[key1][key2]
 
+    def __len__(self):
+        return len(self.data)
+
+    def __setitem__(self, key, value):
+        if isinstance(key, int):
+            self.data[key] = value
+        else:
+            key1 = key[0]
+            key2 = key[1]
+
+            self.data[key1][key2] = value
+
+        return self.data
 
 def randn(rows, cols):
     mat = [[] for _ in range(rows)]
+    
     for row in range(rows):
         for _ in range(cols):
             mat[row].append(rand.random())
 
-    return mat
+    return Matrix(mat)
+
+def ones(rows, cols):
+    res = [[] for _ in range(rows)]
+
+    for row in range(rows):
+        for _ in range(cols):
+            res[row].append(1)
+    
+    return Matrix(res)
+
+def matrix(x): return Matrix(x)
 
 def zeros(rows, cols):
     res = [[] for _ in range(rows)]
@@ -45,7 +97,7 @@ def zeros(rows, cols):
         for _ in range(cols):
             res[row].append(0)
 
-    return res
+    return Matrix(res)
 
 def matmul(mat1, mat2):
     assert len(mat1[0]) == len(mat2)
@@ -66,7 +118,42 @@ def matmul(mat1, mat2):
 
             res[i][j] = dot_prod
         
-    return res
+    return Matrix(res)
+
+def exp(mat):
+    rows = len(mat)
+    cols = len(mat[0])
+
+    for i in range(rows):
+        for j in range(cols):
+            mat[i, j] = e**mat[i, j]
+    
+    return mat
+
+def normalize(mat):
+    rows = len(mat)
+    cols = len(mat[0])
+
+    for i in range(rows):
+        row_sum = sum(mat[i])
+        for j in range(cols):
+            mat[i, j] = mat[i, j] / row_sum
+    
+    return mat
+
+def softmax(x):
+    exp_nums = exp(x)
+    norms = normalize(exp_nums)
+
+    return norms
+
+def cross_entropy_loss(x, target):
+    x = softmax(x)
+    x = x.squeeze()
+    target = target.squeeze()
+    loss = abs(-log(x[target[0]]))
+
+    return loss
 
 
 class Linear:
@@ -82,3 +169,21 @@ class Linear:
         out = Matrix(matmul(x, self.w)) + self.b
         
         return out
+
+
+class Softmax:
+    def __call__(self, x):
+        exp_nums = exp(x)
+        norms = normalize(exp_nums)
+
+        return norms
+
+
+class CELoss:
+    def __call__(self, x, target):
+        x = softmax(x)
+        x = x.squeeze()
+        target = target.squeeze()
+        loss = abs(-log(x[target[0]]))
+
+        return loss
