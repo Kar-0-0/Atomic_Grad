@@ -120,6 +120,40 @@ def matmul(mat1, mat2):
         
     return Matrix(res)
 
+
+class Linear:
+    def __init__(self, in_channels, out_channels, bias=True):
+        self.w = randn(in_channels, out_channels)
+
+        if bias:
+            self.b = 0
+        else:
+            self.b = None
+    
+    def __call__(self, x):
+        out = Matrix(matmul(x, self.w)) + self.b
+        
+        return out
+
+
+class Softmax:
+    def __call__(self, x):
+        exp_nums = exp(x)
+        norms = normalize(exp_nums)
+
+        return norms
+
+
+class CELoss:
+    def __call__(self, x, target):
+        x = softmax(x)
+        x = x.squeeze()
+        target = target.squeeze()
+        loss = abs(-log(x[target[0]]))
+
+        return loss
+
+
 def exp(mat):
     rows = len(mat)
     cols = len(mat[0])
@@ -154,36 +188,3 @@ def cross_entropy_loss(x, target):
     loss = abs(-log(x[target[0]]))
 
     return loss
-
-
-class Linear:
-    def __init__(self, in_channels, out_channels, bias=True):
-        self.w = randn(in_channels, out_channels)
-
-        if bias:
-            self.b = 0
-        else:
-            self.b = None
-    
-    def __call__(self, x):
-        out = Matrix(matmul(x, self.w)) + self.b
-        
-        return out
-
-
-class Softmax:
-    def __call__(self, x):
-        exp_nums = exp(x)
-        norms = normalize(exp_nums)
-
-        return norms
-
-
-class CELoss:
-    def __call__(self, x, target):
-        x = softmax(x)
-        x = x.squeeze()
-        target = target.squeeze()
-        loss = abs(-log(x[target[0]]))
-
-        return loss
