@@ -5,10 +5,15 @@ from math import e, log
 class Matrix:
     def __init__(self, data):
         self.data = data
+        self.grad = zeros_like(self.data)
+        self._backward = lambda x: None
+        self._prev = []
+
         if not isinstance(self.data[0], (float, int)):
             self.shape = (len(self.data), len(self.data[0]))
         else:
             self.shape = (len(self.data),)
+
 
     def squeeze(self):
         assert len(self.data) == 1 or len(self.data[0]) == 1
@@ -38,10 +43,17 @@ class Matrix:
             for col in range(cols):
                 sum_mat[row][col] = self.data[row][col] + other
         
-        return Matrix(sum_mat)
+        out = Matrix(sum_mat)
+
+        self._prev = [self]
+
+        def _backward():
+            for i in range(rows):
+                for j in range(cols):
+                    self.grad[i][j] += 1 * out.grad[i][j]
+        
+        out._backward = _backward
     
-
-
     def __repr__(self):
         return f"Matrix({self.data})"
     
@@ -69,6 +81,26 @@ class Matrix:
             self.data[key1][key2] = value
 
         return self.data
+
+def relu(x):
+    for i in range(len(x)):
+        for j in range(len(x[0])):
+            elem = x[i, j]
+            if elem < 0:
+                x[i, j] = 0
+    
+    return x
+
+def zeros_like(x):
+    rows = len(x)
+    cols = len(x[0])
+    res = [[] for _ in range(rows)]
+
+    for row in range(rows):
+        for _ in range(cols):
+            res[row].append(0)
+
+    return Matrix(res)
 
 def randn(rows, cols):
     mat = [[] for _ in range(rows)]
@@ -102,6 +134,9 @@ def zeros(rows, cols):
 def matmul(mat1, mat2):
     assert len(mat1[0]) == len(mat2)
 
+    X = mat1
+    W = mat2
+
     res_rows = len(mat1)
     res_cols = len(mat2[0])
     res = zeros(res_rows, res_cols)
@@ -118,8 +153,21 @@ def matmul(mat1, mat2):
 
             res[i][j] = dot_prod
         
-    return Matrix(res)
+    out = Matrix(res)
+    
+    out._prev = [X, W]
 
+    def _backward():
+        for i in range(len(X)):
+            for j in range(len(W[0])):
+                x_grad = X.grad[i, j]
+                w_grad = W.grad[i, j]
+                w_grad_t = w_grad.transpose()
+
+                X.grad[i, j] += out.grad * x_grad[i, j]
+                W.grad[i, j] += out.grad * w_grad_t[i, j]
+
+    out.grad = _backward
 
 class Linear:
     def __init__(self, in_channels, out_channels, bias=True):
