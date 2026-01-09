@@ -5,7 +5,7 @@ from math import e, log
 class Matrix:
     def __init__(self, data):
         self.data = data
-        self.grad = zeros_like(self.data)
+        self.grad = zeros_like(self)
         self._backward = lambda x: None
         self._prev = []
 
@@ -43,9 +43,9 @@ class Matrix:
             for col in range(cols):
                 sum_mat[row][col] = self.data[row][col] + other
         
-        out = Matrix(sum_mat)
+        out = sum_mat
 
-        self._prev = [self]
+        out._prev = [self]
 
         def _backward():
             for i in range(rows):
@@ -53,6 +53,8 @@ class Matrix:
                     self.grad[i][j] += 1 * out.grad[i][j]
         
         out._backward = _backward
+
+        return out
     
     def __repr__(self):
         return f"Matrix({self.data})"
@@ -83,22 +85,45 @@ class Matrix:
         return self.data
 
 def relu(x):
+    parent = x
     for i in range(len(x)):
         for j in range(len(x[0])):
             elem = x[i, j]
-            if elem < 0:
-                x[i, j] = 0
+            x[i, j] = max(0, elem)
     
-    return x
+    out = x
 
-def zeros_like(x):
-    rows = len(x)
-    cols = len(x[0])
+    out._prev = [parent]
+
+    def _backward():
+        for i in range(len(parent)):
+            for j in range(len(parent[0])):
+                grad = 0 if parent[i, j] < 0 else 1
+                parent.grad[i, j] += grad * out.grad[i, j]
+    
+    out._backward = _backward
+
+    return out
+
+# def zeros_like(mat):
+#     rows = len(mat)
+#     cols = len(mat[0])
+#     res = [[] for _ in range(rows)]
+
+#     for row in range(rows):
+#         for _ in range(cols):
+#             res[row].append(0)
+
+#     return Matrix(res)
+
+def zeros_like(mat):
+    rows, *rest = mat.shape
+    cols = rest[0] if rest else 1
     res = [[] for _ in range(rows)]
 
-    for row in range(rows):
+    for r in range(rows):
         for _ in range(cols):
-            res[row].append(0)
+            res[r].append(0)
 
     return Matrix(res)
 
@@ -153,54 +178,20 @@ def matmul(mat1, mat2):
 
             res[i][j] = dot_prod
         
-    out = Matrix(res)
+    out = res
     
     out._prev = [X, W]
 
     def _backward():
         for i in range(len(X)):
             for j in range(len(W[0])):
-                x_grad = X.grad[i, j]
-                w_grad = W.grad[i, j]
-                w_grad_t = w_grad.transpose()
+                for k in range(len(W)):
+                    X.grad[i, k] += out.grad[i, j] * W[k, j]
+                    W.grad[k, j] += out.grad[i, j] * X[i, k]
 
-                X.grad[i, j] += out.grad * x_grad[i, j]
-                W.grad[i, j] += out.grad * w_grad_t[i, j]
+    out._backward = _backward
 
-    out.grad = _backward
-
-class Linear:
-    def __init__(self, in_channels, out_channels, bias=True):
-        self.w = randn(in_channels, out_channels)
-
-        if bias:
-            self.b = 0
-        else:
-            self.b = None
-    
-    def __call__(self, x):
-        out = Matrix(matmul(x, self.w)) + self.b
-        
-        return out
-
-
-class Softmax:
-    def __call__(self, x):
-        exp_nums = exp(x)
-        norms = normalize(exp_nums)
-
-        return norms
-
-
-class CELoss:
-    def __call__(self, x, target):
-        x = softmax(x)
-        x = x.squeeze()
-        target = target.squeeze()
-        loss = abs(-log(x[target[0]]))
-
-        return loss
-
+    return out
 
 def exp(mat):
     rows = len(mat)
@@ -215,13 +206,13 @@ def exp(mat):
 def normalize(mat):
     rows = len(mat)
     cols = len(mat[0])
-
+    res = zeros_like(mat)
     for i in range(rows):
         row_sum = sum(mat[i])
         for j in range(cols):
-            mat[i, j] = mat[i, j] / row_sum
+            res[i, j] = mat[i, j] / row_sum
     
-    return mat
+    return res
 
 def softmax(x):
     exp_nums = exp(x)
@@ -230,9 +221,73 @@ def softmax(x):
     return norms
 
 def cross_entropy_loss(x, target):
-    x = softmax(x)
-    x = x.squeeze()
-    target = target.squeeze()
-    loss = abs(-log(x[target[0]]))
+    logits = x
+    probs = softmax(logits)
+    probs = probs.squeeze()
 
-    return loss
+    target = target.squeeze()
+    targ_class = target[0]
+
+    out = -log(probs[targ_class])
+
+    out._prev = [x]
+
+    def _backward():
+        for i in range(len(logits[0])):
+            grad = probs[i]
+            if i == targ_class:
+                grad -= 1
+
+            x.grad[0, i] += grad * out.grad
+
+    out._backward = _backward
+
+    return out
+    
+
+
+class Linear:
+    def __init__(self, in_channels, out_channels):
+        self.w = randn(in_channels, out_channels)
+
+    def __call__(self, x):
+        out = matmul(x, self.w)
+        
+        return out
+
+
+class Softmax:
+    def __call__(self, x):
+        norms = softmax(x)
+
+        return norms
+
+
+class CELoss:
+    def __call__(self, x, target):
+        loss = cross_entropy_loss(x, target)
+
+        return loss
+
+
+def backward(loss):
+    topo = []
+    visited = set()
+
+    def build(v):
+        if v in visited:
+            return
+        visited.add(v)
+        
+        for child in v._prev:
+            build(child)
+
+        topo.append(v)
+    
+    build(loss)
+
+    loss.grad = zeros_like(loss)
+    loss.grad[0, 0] = 1
+
+    for node in reversed(topo):
+        node._backward()
