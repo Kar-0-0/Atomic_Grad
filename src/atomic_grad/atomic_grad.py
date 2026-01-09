@@ -5,15 +5,18 @@ from math import e, log
 class Matrix:
     def __init__(self, data):
         self.data = data
-        self.grad = zeros_like(self)
-        self._backward = lambda x: None
-        self._prev = []
-
         if not isinstance(self.data[0], (float, int)):
-            self.shape = (len(self.data), len(self.data[0]))
-        else:
-            self.shape = (len(self.data),)
+            rows, cols = len(self.data), len(self.data[0])
+            self.shape = (rows, cols)
+            self.grad = [[0 for _ in range(cols)] for _ in range(rows)]
 
+        else:
+            n = len(self.data)
+            self.shape = (n,)
+            self.grad = [0 for _ in range(n)]
+
+        self._backward = lambda: None
+        self._prev = []
 
     def squeeze(self):
         assert len(self.data) == 1 or len(self.data[0]) == 1
@@ -105,27 +108,21 @@ def relu(x):
 
     return out
 
-# def zeros_like(mat):
-#     rows = len(mat)
-#     cols = len(mat[0])
-#     res = [[] for _ in range(rows)]
+def flatten(mat):
+    res = []
 
-#     for row in range(rows):
-#         for _ in range(cols):
-#             res[row].append(0)
-
-#     return Matrix(res)
+    for row in range(len(mat)):
+        for col in range(len(mat[0])):
+            res.append(mat[row, col])
+    
+    return Matrix(res)
 
 def zeros_like(mat):
-    rows, *rest = mat.shape
-    cols = rest[0] if rest else 1
-    res = [[] for _ in range(rows)]
+    rows = len(mat)
+    cols = len(mat[0])
+    res = zeros(rows, cols)
 
-    for r in range(rows):
-        for _ in range(cols):
-            res[r].append(0)
-
-    return Matrix(res)
+    return res
 
 def randn(rows, cols):
     mat = [[] for _ in range(rows)]
